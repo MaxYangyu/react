@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -16,9 +16,13 @@ import {
   HostComponent,
   HostText,
   HostPortal,
-  ReturnComponent,
   Fragment,
-} from 'shared/ReactTypeOfWork';
+  ContextProvider,
+  ContextConsumer,
+  Mode,
+  SuspenseComponent,
+  DehydratedSuspenseComponent,
+} from 'shared/ReactWorkTags';
 
 type MeasurementPhase =
   | 'componentWillMount'
@@ -28,7 +32,8 @@ type MeasurementPhase =
   | 'componentWillUpdate'
   | 'componentDidUpdate'
   | 'componentDidMount'
-  | 'getChildContext';
+  | 'getChildContext'
+  | 'getSnapshotBeforeUpdate';
 
 // Prefix measurements so that it's possible to filter them.
 // Longer prefixes are hard to read in DevTools.
@@ -118,7 +123,7 @@ const beginFiberMark = (
   fiber: Fiber,
   phase: MeasurementPhase | null,
 ): boolean => {
-  const componentName = getComponentName(fiber) || 'Unknown';
+  const componentName = getComponentName(fiber.type) || 'Unknown';
   const debugID = ((fiber._debugID: any): number);
   const isMounted = fiber.alternate !== null;
   const label = getFiberLabel(componentName, isMounted, phase);
@@ -137,7 +142,7 @@ const beginFiberMark = (
 };
 
 const clearFiberMark = (fiber: Fiber, phase: MeasurementPhase | null) => {
-  const componentName = getComponentName(fiber) || 'Unknown';
+  const componentName = getComponentName(fiber.type) || 'Unknown';
   const debugID = ((fiber._debugID: any): number);
   const isMounted = fiber.alternate !== null;
   const label = getFiberLabel(componentName, isMounted, phase);
@@ -150,7 +155,7 @@ const endFiberMark = (
   phase: MeasurementPhase | null,
   warning: string | null,
 ) => {
-  const componentName = getComponentName(fiber) || 'Unknown';
+  const componentName = getComponentName(fiber.type) || 'Unknown';
   const debugID = ((fiber._debugID: any): number);
   const isMounted = fiber.alternate !== null;
   const label = getFiberLabel(componentName, isMounted, phase);
@@ -166,8 +171,10 @@ const shouldIgnoreFiber = (fiber: Fiber): boolean => {
     case HostComponent:
     case HostText:
     case HostPortal:
-    case ReturnComponent:
     case Fragment:
+    case ContextProvider:
+    case ContextConsumer:
+    case Mode:
       return true;
     default:
       return false;
@@ -245,7 +252,9 @@ export function stopRequestCallbackTimer(didExpire: boolean): void {
   if (enableUserTimingAPI) {
     if (supportsUserTiming) {
       isWaitingForCallback = false;
-      const warning = didExpire ? 'React was blocked by main thread' : null;
+      const warning = didExpire
+        ? 'Update expired; will flush synchronously'
+        : null;
       endMark(
         '(Waiting for async callback...)',
         '(Waiting for async callback...)',
@@ -307,7 +316,11 @@ export function stopFailedWorkTimer(fiber: Fiber): void {
       return;
     }
     fiber._debugIsCurrentlyTiming = false;
-    const warning = 'An error was thrown inside this error boundary';
+    const warning =
+      fiber.tag === SuspenseComponent ||
+      fiber.tag === DehydratedSuspenseComponent
+        ? 'Rendering was suspended'
+        : 'An error was thrown inside this error boundary';
     endFiberMark(fiber, null, warning);
   }
 }
@@ -357,7 +370,10 @@ export function startWorkLoopTimer(nextUnitOfWork: Fiber | null): void {
   }
 }
 
-export function stopWorkLoopTimer(interruptedBy: Fiber | null): void {
+export function stopWorkLoopTimer(
+  interruptedBy: Fiber | null,
+  didCompleteRoot: boolean,
+): void {
   if (enableUserTimingAPI) {
     if (!supportsUserTiming) {
       return;
@@ -367,22 +383,19 @@ export function stopWorkLoopTimer(interruptedBy: Fiber | null): void {
       if (interruptedBy.tag === HostRoot) {
         warning = 'A top-level update interrupted the previous render';
       } else {
-        const componentName = getComponentName(interruptedBy) || 'Unknown';
-        warning = `An update to ${
-          componentName
-        } interrupted the previous render`;
+        const componentName = getComponentName(interruptedBy.type) || 'Unknown';
+        warning = `An update to ${componentName} interrupted the previous render`;
       }
     } else if (commitCountInCurrentWorkLoop > 1) {
       warning = 'There were cascading updates';
     }
     commitCountInCurrentWorkLoop = 0;
+    let label = didCompleteRoot
+      ? '(React Tree Reconciliation: Completed Root)'
+      : '(React Tree Reconciliation: Yielded)';
     // Pause any measurements until the next loop.
     pauseTimers();
-    endMark(
-      '(React Tree Reconciliation)',
-      '(React Tree Reconciliation)',
-      warning,
-    );
+    endMark(label, '(React Tree Reconciliation)', warning);
   }
 }
 
@@ -416,6 +429,31 @@ export function stopCommitTimer(): void {
     labelsInCurrentCommit.clear();
 
     endMark('(Committing Changes)', '(Committing Changes)', warning);
+  }
+}
+
+export function startCommitSnapshotEffectsTimer(): void {
+  if (enableUserTimingAPI) {
+    if (!supportsUserTiming) {
+      return;
+    }
+    effectCountInCurrentCommit = 0;
+    beginMark('(Committing Snapshot Effects)');
+  }
+}
+
+export function stopCommitSnapshotEffectsTimer(): void {
+  if (enableUserTimingAPI) {
+    if (!supportsUserTiming) {
+      return;
+    }
+    const count = effectCountInCurrentCommit;
+    effectCountInCurrentCommit = 0;
+    endMark(
+      `(Committing Snapshot Effects: ${count} Total)`,
+      '(Committing Snapshot Effects)',
+      null,
+    );
   }
 }
 

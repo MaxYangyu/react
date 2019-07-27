@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -16,6 +16,7 @@ const TEXT_NODE_TYPE = 3;
 let React;
 let ReactDOM;
 let ReactDOMServer;
+let ReactTestUtils;
 
 function initModules() {
   // Reset warning cache.
@@ -23,11 +24,13 @@ function initModules() {
   React = require('react');
   ReactDOM = require('react-dom');
   ReactDOMServer = require('react-dom/server');
+  ReactTestUtils = require('react-dom/test-utils');
 
   // Make them available to the helpers.
   return {
     ReactDOM,
     ReactDOMServer,
+    ReactTestUtils,
   };
 }
 
@@ -113,7 +116,7 @@ describe('ReactDOMServerIntegration', () => {
     itRenders('an iterable', async render => {
       const threeDivIterable = {
         '@@iterator': function() {
-          var i = 0;
+          let i = 0;
           return {
             next: function() {
               if (i++ < 3) {

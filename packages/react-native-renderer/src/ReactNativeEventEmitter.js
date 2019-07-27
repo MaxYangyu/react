@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,16 +7,19 @@
  * @flow
  */
 
-import {getListener} from 'events/EventPluginHub';
+import {
+  getListener,
+  runExtractedPluginEventsInBatch,
+} from 'events/EventPluginHub';
 import {registrationNameModules} from 'events/EventPluginRegistry';
 import {batchedUpdates} from 'events/ReactGenericBatching';
-import {handleTopLevel} from 'events/ReactEventEmitterMixin';
-import warning from 'fbjs/lib/warning';
+import warningWithoutStack from 'shared/warningWithoutStack';
 
 import {getInstanceFromNode} from './ReactNativeComponentTree';
-import ReactNativeTagHandles from './ReactNativeTagHandles';
 
-export * from 'events/ReactEventEmitterMixin';
+import type {AnyNativeEvent} from 'events/PluginModuleType';
+import type {TopLevelType} from 'events/TopLevelEventTypes';
+
 export {getListener, registrationNameModules as registrationNames};
 
 /**
@@ -25,7 +28,7 @@ export {getListener, registrationNameModules as registrationNames};
  */
 
 // Shared default empty native event - conserve memory.
-const EMPTY_NATIVE_EVENT = {};
+const EMPTY_NATIVE_EVENT = (({}: any): AnyNativeEvent);
 
 /**
  * Selects a subsequence of `Touch`es, without destroying `touches`.
@@ -87,15 +90,20 @@ const removeTouchesAtIndices = function(
  * @param {TopLevelType} topLevelType Top level type of event.
  * @param {?object} nativeEventParam Object passed from native.
  */
-export function _receiveRootNodeIDEvent(
+function _receiveRootNodeIDEvent(
   rootNodeID: number,
-  topLevelType: string,
-  nativeEventParam: ?Object,
+  topLevelType: TopLevelType,
+  nativeEventParam: ?AnyNativeEvent,
 ) {
   const nativeEvent = nativeEventParam || EMPTY_NATIVE_EVENT;
   const inst = getInstanceFromNode(rootNodeID);
   batchedUpdates(function() {
-    handleTopLevel(topLevelType, inst, nativeEvent, nativeEvent.target);
+    runExtractedPluginEventsInBatch(
+      topLevelType,
+      inst,
+      nativeEvent,
+      nativeEvent.target,
+    );
   });
   // React Native doesn't use ReactControlledComponent but if it did, here's
   // where it would do it.
@@ -110,8 +118,8 @@ export function _receiveRootNodeIDEvent(
  */
 export function receiveEvent(
   rootNodeID: number,
-  topLevelType: string,
-  nativeEventParam: Object,
+  topLevelType: TopLevelType,
+  nativeEventParam: AnyNativeEvent,
 ) {
   _receiveRootNodeIDEvent(rootNodeID, topLevelType, nativeEventParam);
 }
@@ -141,7 +149,7 @@ export function receiveEvent(
  * identifier 0, also abandoning traditional click handlers.
  */
 export function receiveTouches(
-  eventTopLevelType: string,
+  eventTopLevelType: TopLevelType,
   touches: Array<Object>,
   changedIndices: Array<number>,
 ) {
@@ -161,9 +169,9 @@ export function receiveTouches(
     let rootNodeID = null;
     const target = nativeEvent.target;
     if (target !== null && target !== undefined) {
-      if (target < ReactNativeTagHandles.tagsStartAt) {
+      if (target < 1) {
         if (__DEV__) {
-          warning(
+          warningWithoutStack(
             false,
             'A view is reporting that a touch occurred on tag zero.',
           );

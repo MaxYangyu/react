@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2016-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -36,7 +36,7 @@
  * @private
  */
 
-var matchHtmlRegExp = /["'&<>]/;
+const matchHtmlRegExp = /["'&<>]/;
 
 /**
  * Escapes special characters and HTML entities in a given html string.
@@ -47,17 +47,17 @@ var matchHtmlRegExp = /["'&<>]/;
  */
 
 function escapeHtml(string) {
-  var str = '' + string;
-  var match = matchHtmlRegExp.exec(str);
+  const str = '' + string;
+  const match = matchHtmlRegExp.exec(str);
 
   if (!match) {
     return str;
   }
 
-  var escape;
-  var html = '';
-  var index = 0;
-  var lastIndex = 0;
+  let escape;
+  let html = '';
+  let index;
+  let lastIndex = 0;
 
   for (index = match.index; index < str.length; index++) {
     switch (str.charCodeAt(index)) {

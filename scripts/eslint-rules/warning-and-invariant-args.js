@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -8,6 +8,16 @@
  */
 
 'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const existingErrorMap = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, '../error-codes/codes.json'))
+);
+const messages = new Set();
+Object.keys(existingErrorMap).forEach(key =>
+  messages.add(existingErrorMap[key])
+);
 
 /**
  * The warning() and invariant() functions take format strings as their second
@@ -20,8 +30,8 @@ module.exports = function(context) {
     if (node.type === 'Literal' && typeof node.value === 'string') {
       return node.value;
     } else if (node.type === 'BinaryExpression' && node.operator === '+') {
-      var l = getLiteralString(node.left);
-      var r = getLiteralString(node.right);
+      const l = getLiteralString(node.left);
+      const r = getLiteralString(node.right);
       if (l !== null && r !== null) {
         return l + r;
       }
@@ -33,9 +43,11 @@ module.exports = function(context) {
     CallExpression: function(node) {
       // This could be a little smarter by checking context.getScope() to see
       // how warning/invariant was defined.
-      var isWarningOrInvariant =
+      const isWarningOrInvariant =
         node.callee.type === 'Identifier' &&
-        (node.callee.name === 'warning' || node.callee.name === 'invariant');
+        (node.callee.name === 'warning' ||
+          node.callee.name === 'warningWithoutStack' ||
+          node.callee.name === 'invariant');
       if (!isWarningOrInvariant) {
         return;
       }
@@ -45,7 +57,7 @@ module.exports = function(context) {
         });
         return;
       }
-      var format = getLiteralString(node.arguments[1]);
+      const format = getLiteralString(node.arguments[1]);
       if (format === null) {
         context.report(
           node,
@@ -64,7 +76,7 @@ module.exports = function(context) {
         return;
       }
       // count the number of formatting substitutions, plus the first two args
-      var expectedNArgs = (format.match(/%s/g) || []).length + 2;
+      const expectedNArgs = (format.match(/%s/g) || []).length + 2;
       if (node.arguments.length !== expectedNArgs) {
         context.report(
           node,
@@ -76,6 +88,21 @@ module.exports = function(context) {
             length: node.arguments.length,
           }
         );
+      }
+
+      if (node.callee.name === 'invariant') {
+        if (!messages.has(format)) {
+          context.report(
+            node,
+            'Error message does not have a corresponding production ' +
+              'error code.\n\n' +
+              'Run `yarn extract-errors` to add the message to error code ' +
+              'map, so it can be stripped from the production builds. ' +
+              "Alternatively, if you're updating an existing error " +
+              'message, you can modify ' +
+              '`scripts/error-codes/codes.json` directly.'
+          );
+        }
       }
     },
   };

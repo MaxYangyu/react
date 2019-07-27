@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2016-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -114,6 +114,47 @@ describe('SyntheticKeyboardEvent', () => {
               }),
             );
             expect(called).toBe(false);
+          });
+
+          it('when charCode is 10, returns 13', () => {
+            let charCode = null;
+            const node = ReactDOM.render(
+              <input
+                onKeyPress={e => {
+                  charCode = e.charCode;
+                }}
+              />,
+              container,
+            );
+            node.dispatchEvent(
+              new KeyboardEvent('keypress', {
+                charCode: 10,
+                bubbles: true,
+                cancelable: true,
+              }),
+            );
+            expect(charCode).toBe(13);
+          });
+
+          it('when charCode is 10 and ctrl is pressed, returns 13', () => {
+            let charCode = null;
+            const node = ReactDOM.render(
+              <input
+                onKeyPress={e => {
+                  charCode = e.charCode;
+                }}
+              />,
+              container,
+            );
+            node.dispatchEvent(
+              new KeyboardEvent('keypress', {
+                charCode: 10,
+                ctrlKey: true,
+                bubbles: true,
+                cancelable: true,
+              }),
+            );
+            expect(charCode).toBe(13);
           });
         });
 
@@ -413,76 +454,6 @@ describe('SyntheticKeyboardEvent', () => {
   });
 
   describe('EventInterface', () => {
-    it('normalizes properties from the Event interface', () => {
-      let expectedCount = 0;
-      let div;
-      const eventHandler = type => event => {
-        expect(event.target).toBe(div);
-        expect(event.type).toBe(type);
-        expectedCount++;
-      };
-      div = ReactDOM.render(
-        <div
-          onKeyDown={eventHandler('keydown')}
-          onKeyPress={eventHandler('keypress')}
-          onKeyUp={eventHandler('keyup')}
-        />,
-        container,
-      );
-
-      let event;
-      event = new KeyboardEvent('keydown', {
-        keyCode: 40,
-        bubbles: true,
-        cancelable: true,
-      });
-      // Emulate IE8
-      Object.defineProperty(event, 'target', {
-        get() {},
-      });
-      Object.defineProperty(event, 'srcElement', {
-        get() {
-          return div;
-        },
-      });
-      div.dispatchEvent(event);
-
-      event = new KeyboardEvent('keyup', {
-        keyCode: 40,
-        bubbles: true,
-        cancelable: true,
-      });
-      // Emulate IE8
-      Object.defineProperty(event, 'target', {
-        get() {},
-      });
-      Object.defineProperty(event, 'srcElement', {
-        get() {
-          return div;
-        },
-      });
-      div.dispatchEvent(event);
-
-      event = new KeyboardEvent('keypress', {
-        charCode: 40,
-        keyCode: 40,
-        bubbles: true,
-        cancelable: true,
-      });
-      // Emulate IE8
-      Object.defineProperty(event, 'target', {
-        get() {},
-      });
-      Object.defineProperty(event, 'srcElement', {
-        get() {
-          return div;
-        },
-      });
-      div.dispatchEvent(event);
-
-      expect(expectedCount).toBe(3);
-    });
-
     it('is able to `preventDefault` and `stopPropagation`', () => {
       let expectedCount = 0;
       const eventHandler = event => {

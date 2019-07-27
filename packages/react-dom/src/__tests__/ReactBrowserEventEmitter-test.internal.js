@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -9,42 +9,44 @@
 
 'use strict';
 
-var EventPluginHub;
-var EventPluginRegistry;
-var React;
-var ReactDOM;
-var ReactDOMComponentTree;
-var ReactBrowserEventEmitter;
-var ReactTestUtils;
+let EventPluginHub;
+let EventPluginRegistry;
+let React;
+let ReactDOM;
+let ReactDOMComponentTree;
+let ReactBrowserEventEmitter;
+let ReactTestUtils;
 
-var idCallOrder;
-var recordID = function(id) {
+let idCallOrder;
+const recordID = function(id) {
   idCallOrder.push(id);
 };
-var recordIDAndStopPropagation = function(id, event) {
+const recordIDAndStopPropagation = function(id, event) {
   recordID(id);
   event.stopPropagation();
 };
-var recordIDAndReturnFalse = function(id, event) {
+const recordIDAndReturnFalse = function(id, event) {
   recordID(id);
   return false;
 };
-var LISTENER = jest.fn();
-var ON_CLICK_KEY = 'onClick';
-var ON_CHANGE_KEY = 'onChange';
-var ON_MOUSE_ENTER_KEY = 'onMouseEnter';
+const LISTENER = jest.fn();
+const ON_CLICK_KEY = 'onClick';
+const ON_CHANGE_KEY = 'onChange';
+const ON_MOUSE_ENTER_KEY = 'onMouseEnter';
 
-var GRANDPARENT;
-var PARENT;
-var CHILD;
+let GRANDPARENT;
+let PARENT;
+let CHILD;
 
-var getListener;
-var putListener;
-var deleteAllListeners;
+let getListener;
+let putListener;
+let deleteAllListeners;
+
+let container;
 
 function registerSimpleTestHandler() {
   putListener(CHILD, ON_CLICK_KEY, LISTENER);
-  var listener = getListener(CHILD, ON_CLICK_KEY);
+  const listener = getListener(CHILD, ON_CLICK_KEY);
   expect(listener).toEqual(LISTENER);
   return getListener(CHILD, ON_CLICK_KEY);
 }
@@ -63,11 +65,12 @@ describe('ReactBrowserEventEmitter', () => {
     ReactBrowserEventEmitter = require('../events/ReactBrowserEventEmitter');
     ReactTestUtils = require('react-dom/test-utils');
 
-    var container = document.createElement('div');
+    container = document.createElement('div');
+    document.body.appendChild(container);
 
-    var GRANDPARENT_PROPS = {};
-    var PARENT_PROPS = {};
-    var CHILD_PROPS = {};
+    let GRANDPARENT_PROPS = {};
+    let PARENT_PROPS = {};
+    let CHILD_PROPS = {};
 
     function Child(props) {
       return <div ref={c => (CHILD = c)} {...props} />;
@@ -93,7 +96,7 @@ describe('ReactBrowserEventEmitter', () => {
     renderTree();
 
     getListener = function(node, eventName) {
-      var inst = ReactDOMComponentTree.getInstanceFromNode(node);
+      const inst = ReactDOMComponentTree.getInstanceFromNode(node);
       return EventPluginHub.getListener(inst, eventName);
     };
     putListener = function(node, eventName, listener) {
@@ -129,46 +132,51 @@ describe('ReactBrowserEventEmitter', () => {
     idCallOrder = [];
   });
 
+  afterEach(() => {
+    document.body.removeChild(container);
+    container = null;
+  });
+
   it('should store a listener correctly', () => {
     registerSimpleTestHandler();
-    var listener = getListener(CHILD, ON_CLICK_KEY);
+    const listener = getListener(CHILD, ON_CLICK_KEY);
     expect(listener).toBe(LISTENER);
   });
 
   it('should retrieve a listener correctly', () => {
     registerSimpleTestHandler();
-    var listener = getListener(CHILD, ON_CLICK_KEY);
+    const listener = getListener(CHILD, ON_CLICK_KEY);
     expect(listener).toEqual(LISTENER);
   });
 
   it('should clear all handlers when asked to', () => {
     registerSimpleTestHandler();
     deleteAllListeners(CHILD);
-    var listener = getListener(CHILD, ON_CLICK_KEY);
+    const listener = getListener(CHILD, ON_CLICK_KEY);
     expect(listener).toBe(undefined);
   });
 
   it('should invoke a simple handler registered on a node', () => {
     registerSimpleTestHandler();
-    ReactTestUtils.Simulate.click(CHILD);
-    expect(LISTENER.mock.calls.length).toBe(1);
+    CHILD.click();
+    expect(LISTENER).toHaveBeenCalledTimes(1);
   });
 
   it('should not invoke handlers if ReactBrowserEventEmitter is disabled', () => {
     registerSimpleTestHandler();
     ReactBrowserEventEmitter.setEnabled(false);
-    ReactTestUtils.SimulateNative.click(CHILD);
-    expect(LISTENER.mock.calls.length).toBe(0);
+    CHILD.click();
+    expect(LISTENER).toHaveBeenCalledTimes(0);
     ReactBrowserEventEmitter.setEnabled(true);
-    ReactTestUtils.SimulateNative.click(CHILD);
-    expect(LISTENER.mock.calls.length).toBe(1);
+    CHILD.click();
+    expect(LISTENER).toHaveBeenCalledTimes(1);
   });
 
   it('should bubble simply', () => {
     putListener(CHILD, ON_CLICK_KEY, recordID.bind(null, CHILD));
     putListener(PARENT, ON_CLICK_KEY, recordID.bind(null, PARENT));
     putListener(GRANDPARENT, ON_CLICK_KEY, recordID.bind(null, GRANDPARENT));
-    ReactTestUtils.Simulate.click(CHILD);
+    CHILD.click();
     expect(idCallOrder.length).toBe(3);
     expect(idCallOrder[0]).toBe(CHILD);
     expect(idCallOrder[1]).toBe(PARENT);
@@ -179,7 +187,7 @@ describe('ReactBrowserEventEmitter', () => {
     putListener(GRANDPARENT, ON_CLICK_KEY, recordID.bind(null, 'GRANDPARENT'));
     putListener(PARENT, ON_CLICK_KEY, recordID.bind(null, 'PARENT'));
     putListener(CHILD, ON_CLICK_KEY, recordID.bind(null, 'CHILD'));
-    ReactTestUtils.Simulate.click(CHILD);
+    CHILD.click();
     expect(idCallOrder).toEqual(['CHILD', 'PARENT', 'GRANDPARENT']);
 
     idCallOrder = [];
@@ -191,7 +199,7 @@ describe('ReactBrowserEventEmitter', () => {
       recordID.bind(null, 'UPDATED_GRANDPARENT'),
     );
 
-    ReactTestUtils.Simulate.click(CHILD);
+    CHILD.click();
     expect(idCallOrder).toEqual(['CHILD', 'PARENT', 'UPDATED_GRANDPARENT']);
   });
 
@@ -224,7 +232,7 @@ describe('ReactBrowserEventEmitter', () => {
       recordID(GRANDPARENT);
       expect(event.currentTarget).toBe(GRANDPARENT);
     });
-    ReactTestUtils.Simulate.click(CHILD);
+    CHILD.click();
     expect(idCallOrder.length).toBe(3);
     expect(idCallOrder[0]).toBe(CHILD);
     expect(idCallOrder[1]).toBe(PARENT);
@@ -239,7 +247,7 @@ describe('ReactBrowserEventEmitter', () => {
       recordIDAndStopPropagation.bind(null, PARENT),
     );
     putListener(GRANDPARENT, ON_CLICK_KEY, recordID.bind(null, GRANDPARENT));
-    ReactTestUtils.Simulate.click(CHILD);
+    CHILD.click();
     expect(idCallOrder.length).toBe(2);
     expect(idCallOrder[0]).toBe(CHILD);
     expect(idCallOrder[1]).toBe(PARENT);
@@ -254,7 +262,7 @@ describe('ReactBrowserEventEmitter', () => {
       e.isPropagationStopped = () => true;
     });
     putListener(GRANDPARENT, ON_CLICK_KEY, recordID.bind(null, GRANDPARENT));
-    ReactTestUtils.Simulate.click(CHILD);
+    CHILD.click();
     expect(idCallOrder.length).toBe(2);
     expect(idCallOrder[0]).toBe(CHILD);
     expect(idCallOrder[1]).toBe(PARENT);
@@ -268,7 +276,7 @@ describe('ReactBrowserEventEmitter', () => {
     );
     putListener(PARENT, ON_CLICK_KEY, recordID.bind(null, PARENT));
     putListener(GRANDPARENT, ON_CLICK_KEY, recordID.bind(null, GRANDPARENT));
-    ReactTestUtils.Simulate.click(CHILD);
+    CHILD.click();
     expect(idCallOrder.length).toBe(1);
     expect(idCallOrder[0]).toBe(CHILD);
   });
@@ -277,15 +285,11 @@ describe('ReactBrowserEventEmitter', () => {
     putListener(CHILD, ON_CLICK_KEY, recordIDAndReturnFalse.bind(null, CHILD));
     putListener(PARENT, ON_CLICK_KEY, recordID.bind(null, PARENT));
     putListener(GRANDPARENT, ON_CLICK_KEY, recordID.bind(null, GRANDPARENT));
-    spyOnDev(console, 'error');
-    ReactTestUtils.Simulate.click(CHILD);
+    CHILD.click();
     expect(idCallOrder.length).toBe(3);
     expect(idCallOrder[0]).toBe(CHILD);
     expect(idCallOrder[1]).toBe(PARENT);
     expect(idCallOrder[2]).toBe(GRANDPARENT);
-    if (__DEV__) {
-      expect(console.error.calls.count()).toEqual(0);
-    }
   });
 
   /**
@@ -298,24 +302,24 @@ describe('ReactBrowserEventEmitter', () => {
    */
 
   it('should invoke handlers that were removed while bubbling', () => {
-    var handleParentClick = jest.fn();
-    var handleChildClick = function(event) {
+    const handleParentClick = jest.fn();
+    const handleChildClick = function(event) {
       deleteAllListeners(PARENT);
     };
     putListener(CHILD, ON_CLICK_KEY, handleChildClick);
     putListener(PARENT, ON_CLICK_KEY, handleParentClick);
-    ReactTestUtils.Simulate.click(CHILD);
-    expect(handleParentClick.mock.calls.length).toBe(1);
+    CHILD.click();
+    expect(handleParentClick).toHaveBeenCalledTimes(1);
   });
 
   it('should not invoke newly inserted handlers while bubbling', () => {
-    var handleParentClick = jest.fn();
-    var handleChildClick = function(event) {
+    const handleParentClick = jest.fn();
+    const handleChildClick = function(event) {
       putListener(PARENT, ON_CLICK_KEY, handleParentClick);
     };
     putListener(CHILD, ON_CLICK_KEY, handleChildClick);
-    ReactTestUtils.Simulate.click(CHILD);
-    expect(handleParentClick.mock.calls.length).toBe(0);
+    CHILD.click();
+    expect(handleParentClick).toHaveBeenCalledTimes(0);
   });
 
   it('should have mouse enter simulated by test utils', () => {
@@ -329,7 +333,7 @@ describe('ReactBrowserEventEmitter', () => {
     spyOnDevAndProd(EventTarget.prototype, 'addEventListener');
     ReactBrowserEventEmitter.listenTo(ON_CLICK_KEY, document);
     ReactBrowserEventEmitter.listenTo(ON_CLICK_KEY, document);
-    expect(EventTarget.prototype.addEventListener.calls.count()).toBe(1);
+    expect(EventTarget.prototype.addEventListener).toHaveBeenCalledTimes(1);
   });
 
   it('should work with event plugins without dependencies', () => {
@@ -347,17 +351,17 @@ describe('ReactBrowserEventEmitter', () => {
 
     ReactBrowserEventEmitter.listenTo(ON_CHANGE_KEY, document);
 
-    var setEventListeners = [];
-    var listenCalls = EventTarget.prototype.addEventListener.calls.allArgs();
-    for (var i = 0; i < listenCalls.length; i++) {
+    const setEventListeners = [];
+    const listenCalls = EventTarget.prototype.addEventListener.calls.allArgs();
+    for (let i = 0; i < listenCalls.length; i++) {
       setEventListeners.push(listenCalls[i][1]);
     }
 
-    var module = EventPluginRegistry.registrationNameModules[ON_CHANGE_KEY];
-    var dependencies = module.eventTypes.change.dependencies;
+    const module = EventPluginRegistry.registrationNameModules[ON_CHANGE_KEY];
+    const dependencies = module.eventTypes.change.dependencies;
     expect(setEventListeners.length).toEqual(dependencies.length);
 
-    for (i = 0; i < setEventListeners.length; i++) {
+    for (let i = 0; i < setEventListeners.length; i++) {
       expect(dependencies.indexOf(setEventListeners[i])).toBeTruthy();
     }
   });

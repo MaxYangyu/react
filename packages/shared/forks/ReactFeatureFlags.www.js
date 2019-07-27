@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -13,17 +13,15 @@ import typeof * as FeatureFlagsShimType from './ReactFeatureFlags.www';
 // Re-export dynamic flags from the www version.
 export const {
   debugRenderPhaseSideEffects,
-  enableAsyncSchedulingByDefaultInReactDOM,
+  debugRenderPhaseSideEffectsForStrictMode,
+  replayFailedUnitOfWorkWithInvokeGuardedCallback,
+  warnAboutDeprecatedLifecycles,
+  disableInputAttributeSyncing,
+  warnAboutShorthandPropertyCollision,
+  warnAboutDeprecatedSetNativeProps,
+  revertPassiveEffectsChange,
+  enableUserBlockingEvents,
 } = require('ReactFeatureFlags');
-
-// The rest of the flags are static for better dead code elimination.
-export const enableAsyncSubtreeAPI = true;
-export const enableCreateRoot = true;
-
-// The www bundles only use the mutating reconciler.
-export const enableMutatingReconciler = true;
-export const enableNoopReconciler = false;
-export const enablePersistentReconciler = false;
 
 // In www, we have experimental support for gathering data
 // from User Timing API calls in production. By default, we
@@ -32,6 +30,16 @@ export const enablePersistentReconciler = false;
 // experimental FB-only export, we call performance.mark/measure
 // as long as there is more than a single listener.
 export let enableUserTimingAPI = __DEV__;
+
+export const enableProfilerTimer = __PROFILE__;
+export const enableSchedulerTracing = __PROFILE__;
+export const enableSchedulerDebugging = true;
+
+export const enableStableConcurrentModeAPIs = false;
+
+export const enableSuspenseServerRenderer = true;
+
+export const disableJavaScriptURLs = true;
 
 let refCount = 0;
 export function addUserTimingListener() {
@@ -59,6 +67,18 @@ function updateFlagOutsideOfReactCallStack() {
     });
   }
 }
+
+export const enableFlareAPI = true;
+
+export const enableFundamentalAPI = false;
+
+export const enableJSXTransformAPI = true;
+
+export const warnAboutMissingMockScheduler = true;
+
+export const enableSuspenseCallback = true;
+
+export const warnAboutDefaultPropsOnFunctionComponents = false;
 
 // Flow magic to verify the exports of this file match the original version.
 // eslint-disable-next-line no-unused-vars

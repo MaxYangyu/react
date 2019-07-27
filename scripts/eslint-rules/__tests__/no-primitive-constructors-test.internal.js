@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -9,9 +9,9 @@
 
 'use strict';
 
-var rule = require('../no-primitive-constructors');
-var RuleTester = require('eslint').RuleTester;
-var ruleTester = new RuleTester();
+const rule = require('../no-primitive-constructors');
+const RuleTester = require('eslint').RuleTester;
+const ruleTester = new RuleTester();
 
 ruleTester.run('eslint-rules/no-primitive-constructors', rule, {
   valid: ['!!obj', "'' + obj", '+string'],

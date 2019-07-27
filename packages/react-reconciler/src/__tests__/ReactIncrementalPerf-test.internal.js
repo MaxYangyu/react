@@ -1,18 +1,19 @@
 /**
- * Copyright (c) 2016-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
  * @emails react-core
+ * @jest-environment node
  */
 
 'use strict';
 
 describe('ReactDebugFiberPerf', () => {
   let React;
-  let ReactCallReturn;
   let ReactNoop;
+  let Scheduler;
   let PropTypes;
 
   let root;
@@ -109,24 +110,6 @@ describe('ReactDebugFiberPerf', () => {
     };
   }
 
-  beforeEach(() => {
-    jest.resetModules();
-    resetFlamechart();
-    global.performance = createUserTimingPolyfill();
-
-    require('shared/ReactFeatureFlags').enableUserTimingAPI = true;
-
-    // Import after the polyfill is set up:
-    React = require('react');
-    ReactNoop = require('react-noop-renderer');
-    ReactCallReturn = require('react-call-return');
-    PropTypes = require('prop-types');
-  });
-
-  afterEach(() => {
-    delete global.performance;
-  });
-
   function Parent(props) {
     return <div>{props.children}</div>;
   }
@@ -135,6 +118,27 @@ describe('ReactDebugFiberPerf', () => {
     return <div>{props.children}</div>;
   }
 
+  beforeEach(() => {
+    jest.resetModules();
+    resetFlamechart();
+    global.performance = createUserTimingPolyfill();
+
+    require('shared/ReactFeatureFlags').enableUserTimingAPI = true;
+    require('shared/ReactFeatureFlags').enableProfilerTimer = false;
+    require('shared/ReactFeatureFlags').replayFailedUnitOfWorkWithInvokeGuardedCallback = false;
+    require('shared/ReactFeatureFlags').debugRenderPhaseSideEffectsForStrictMode = false;
+
+    // Import after the polyfill is set up:
+    React = require('react');
+    ReactNoop = require('react-noop-renderer');
+    Scheduler = require('scheduler');
+    PropTypes = require('prop-types');
+  });
+
+  afterEach(() => {
+    delete global.performance;
+  });
+
   it('measures a simple reconciliation', () => {
     ReactNoop.render(
       <Parent>
@@ -142,7 +146,7 @@ describe('ReactDebugFiberPerf', () => {
       </Parent>,
     );
     addComment('Mount');
-    ReactNoop.flush();
+    expect(Scheduler).toFlushWithoutYielding();
 
     ReactNoop.render(
       <Parent>
@@ -150,11 +154,69 @@ describe('ReactDebugFiberPerf', () => {
       </Parent>,
     );
     addComment('Update');
-    ReactNoop.flush();
+    expect(Scheduler).toFlushWithoutYielding();
 
     ReactNoop.render(null);
     addComment('Unmount');
-    ReactNoop.flush();
+    expect(Scheduler).toFlushWithoutYielding();
+
+    expect(getFlameChart()).toMatchSnapshot();
+  });
+
+  it('properly displays the forwardRef component in measurements', () => {
+    const AnonymousForwardRef = React.forwardRef((props, ref) => (
+      <Child {...props} ref={ref} />
+    ));
+    const NamedForwardRef = React.forwardRef(function refForwarder(props, ref) {
+      return <Child {...props} ref={ref} />;
+    });
+    function notImportant(props, ref) {
+      return <Child {...props} ref={ref} />;
+    }
+    notImportant.displayName = 'OverriddenName';
+    const DisplayNamedForwardRef = React.forwardRef(notImportant);
+
+    ReactNoop.render(
+      <Parent>
+        <AnonymousForwardRef />
+        <NamedForwardRef />
+        <DisplayNamedForwardRef />
+      </Parent>,
+    );
+    addComment('Mount');
+    expect(Scheduler).toFlushWithoutYielding();
+
+    expect(getFlameChart()).toMatchSnapshot();
+  });
+
+  it('does not include StrictMode or Profiler components in measurements', () => {
+    ReactNoop.render(
+      <React.Profiler id="test" onRender={jest.fn()}>
+        <React.StrictMode>
+          <Parent>
+            <Child />
+          </Parent>
+        </React.StrictMode>
+      </React.Profiler>,
+    );
+    addComment('Mount');
+    expect(Scheduler).toFlushWithoutYielding();
+
+    expect(getFlameChart()).toMatchSnapshot();
+  });
+
+  it('does not include context provider or consumer in measurements', () => {
+    const {Consumer, Provider} = React.createContext(true);
+
+    ReactNoop.render(
+      <Provider value={false}>
+        <Parent>
+          <Consumer>{value => <Child value={value} />}</Consumer>
+        </Parent>
+      </Provider>,
+    );
+    addComment('Mount');
+    expect(Scheduler).toFlushWithoutYielding();
 
     expect(getFlameChart()).toMatchSnapshot();
   });
@@ -186,13 +248,13 @@ describe('ReactDebugFiberPerf', () => {
         </Parent>
       </Parent>,
     );
-    ReactNoop.flush();
+    expect(Scheduler).toFlushWithoutYielding();
     resetFlamechart();
 
     a.setState({});
     b.setState({});
     addComment('Should include just A and B, no Parents');
-    ReactNoop.flush();
+    expect(Scheduler).toFlushWithoutYielding();
     expect(getFlameChart()).toMatchSnapshot();
   });
 
@@ -212,7 +274,7 @@ describe('ReactDebugFiberPerf', () => {
       </Parent>,
     );
     addComment('Should print a warning');
-    ReactNoop.flush();
+    expect(Scheduler).toFlushWithoutYielding();
     expect(getFlameChart()).toMatchSnapshot();
   });
 
@@ -221,7 +283,6 @@ describe('ReactDebugFiberPerf', () => {
       componentDidMount() {
         ReactNoop.renderToRootWithID(<Child />, 'b');
         addComment('Scheduling another root from componentDidMount');
-        ReactNoop.flush();
       }
       render() {
         return <div>{this.props.children}</div>;
@@ -230,16 +291,16 @@ describe('ReactDebugFiberPerf', () => {
 
     ReactNoop.renderToRootWithID(<Cascading />, 'a');
     addComment('Rendering the first root');
-    ReactNoop.flush();
+    expect(Scheduler).toFlushWithoutYielding();
     expect(getFlameChart()).toMatchSnapshot();
   });
 
   it('does not treat setState from cWM or cWRP as cascading', () => {
     class NotCascading extends React.Component {
-      componentWillMount() {
+      UNSAFE_componentWillMount() {
         this.setState({});
       }
-      componentWillReceiveProps() {
+      UNSAFE_componentWillReceiveProps() {
         this.setState({});
       }
       render() {
@@ -253,14 +314,20 @@ describe('ReactDebugFiberPerf', () => {
       </Parent>,
     );
     addComment('Should not print a warning');
-    ReactNoop.flush();
+    expect(() => expect(Scheduler).toFlushWithoutYielding()).toWarnDev(
+      [
+        'Using UNSAFE_componentWillMount in strict mode is not recommended',
+        'Using UNSAFE_componentWillReceiveProps in strict mode is not recommended',
+      ],
+      {withoutStack: true},
+    );
     ReactNoop.render(
       <Parent>
         <NotCascading />
       </Parent>,
     );
     addComment('Should not print a warning');
-    ReactNoop.flush();
+    expect(Scheduler).toFlushWithoutYielding();
     expect(getFlameChart()).toMatchSnapshot();
   });
 
@@ -275,10 +342,10 @@ describe('ReactDebugFiberPerf', () => {
       getChildContext() {
         return {foo: 42};
       }
-      componentWillMount() {}
+      UNSAFE_componentWillMount() {}
       componentDidMount() {}
-      componentWillReceiveProps() {}
-      componentWillUpdate() {}
+      UNSAFE_componentWillReceiveProps() {}
+      UNSAFE_componentWillUpdate() {}
       componentDidUpdate() {}
       componentWillUnmount() {}
       render() {
@@ -287,13 +354,21 @@ describe('ReactDebugFiberPerf', () => {
     }
     ReactNoop.render(<AllLifecycles />);
     addComment('Mount');
-    ReactNoop.flush();
+    expect(() => expect(Scheduler).toFlushWithoutYielding()).toWarnDev(
+      [
+        'Using UNSAFE_componentWillMount in strict mode is not recommended',
+        'Using UNSAFE_componentWillReceiveProps in strict mode is not recommended',
+        'Using UNSAFE_componentWillUpdate in strict mode is not recommended',
+        'Legacy context API has been detected within a strict-mode tree',
+      ],
+      {withoutStack: true},
+    );
     ReactNoop.render(<AllLifecycles />);
     addComment('Update');
-    ReactNoop.flush();
+    expect(Scheduler).toFlushWithoutYielding();
     ReactNoop.render(null);
     addComment('Unmount');
-    ReactNoop.flush();
+    expect(Scheduler).toFlushWithoutYielding();
     expect(getFlameChart()).toMatchSnapshot();
   });
 
@@ -309,19 +384,28 @@ describe('ReactDebugFiberPerf', () => {
       );
     });
     addComment('Flush the child');
-    ReactNoop.flush();
+    expect(Scheduler).toFlushWithoutYielding();
     expect(getFlameChart()).toMatchSnapshot();
   });
 
   it('measures deferred work in chunks', () => {
     class A extends React.Component {
       render() {
+        Scheduler.unstable_yieldValue('A');
         return <div>{this.props.children}</div>;
       }
     }
 
     class B extends React.Component {
       render() {
+        Scheduler.unstable_yieldValue('B');
+        return <div>{this.props.children}</div>;
+      }
+    }
+
+    class C extends React.Component {
+      render() {
+        Scheduler.unstable_yieldValue('C');
         return <div>{this.props.children}</div>;
       }
     }
@@ -334,14 +418,15 @@ describe('ReactDebugFiberPerf', () => {
         <B>
           <Child />
         </B>
+        <C>
+          <Child />
+        </C>
       </Parent>,
     );
-    addComment('Start mounting Parent and A');
-    ReactNoop.flushDeferredPri(40);
-    addComment('Mount B just a little (but not enough to memoize)');
-    ReactNoop.flushDeferredPri(10);
-    addComment('Complete B and Parent');
-    ReactNoop.flushDeferredPri();
+    addComment('Start rendering through B');
+    expect(Scheduler).toFlushAndYieldThrough(['A', 'B']);
+    addComment('Complete the rest');
+    expect(Scheduler).toFlushAndYield(['C']);
     expect(getFlameChart()).toMatchSnapshot();
   });
 
@@ -357,7 +442,7 @@ describe('ReactDebugFiberPerf', () => {
     );
     try {
       addComment('Will fatal');
-      ReactNoop.flush();
+      expect(Scheduler).toFlushWithoutYielding();
     } catch (err) {
       expect(err.message).toBe('Game over');
     }
@@ -367,7 +452,7 @@ describe('ReactDebugFiberPerf', () => {
       </Parent>,
     );
     addComment('Will reconcile from a clean state');
-    ReactNoop.flush();
+    expect(Scheduler).toFlushWithoutYielding();
     expect(getFlameChart()).toMatchSnapshot();
   });
 
@@ -403,7 +488,7 @@ describe('ReactDebugFiberPerf', () => {
       </Parent>,
     );
     addComment('Stop on Baddie and restart from Boundary');
-    ReactNoop.flush();
+    expect(Scheduler).toFlushWithoutYielding();
     expect(getFlameChart()).toMatchSnapshot();
   });
 
@@ -434,7 +519,7 @@ describe('ReactDebugFiberPerf', () => {
         <B />
       </Parent>,
     );
-    ReactNoop.flush();
+    expect(Scheduler).toFlushWithoutYielding();
     resetFlamechart();
 
     ReactNoop.render(
@@ -446,7 +531,7 @@ describe('ReactDebugFiberPerf', () => {
       </Parent>,
     );
     addComment('The commit phase should mention A and B just once');
-    ReactNoop.flush();
+    expect(Scheduler).toFlushWithoutYielding();
     ReactNoop.render(
       <Parent>
         <A />
@@ -457,63 +542,89 @@ describe('ReactDebugFiberPerf', () => {
     );
     addComment("Because of deduplication, we don't know B was cascading,");
     addComment('but we should still see the warning for the commit phase.');
-    ReactNoop.flush();
-    expect(getFlameChart()).toMatchSnapshot();
-  });
-
-  it('supports returns', () => {
-    function Continuation({isSame}) {
-      return <span prop={isSame ? 'foo==bar' : 'foo!=bar'} />;
-    }
-
-    function CoChild({bar}) {
-      return ReactCallReturn.unstable_createReturn({
-        props: {
-          bar: bar,
-        },
-        continuation: Continuation,
-      });
-    }
-
-    function Indirection() {
-      return [<CoChild key="a" bar={true} />, <CoChild key="b" bar={false} />];
-    }
-
-    function HandleReturns(props, returns) {
-      return returns.map((y, i) => (
-        <y.continuation key={i} isSame={props.foo === y.props.bar} />
-      ));
-    }
-
-    function CoParent(props) {
-      return ReactCallReturn.unstable_createCall(
-        props.children,
-        HandleReturns,
-        props,
-      );
-    }
-
-    function App() {
-      return (
-        <div>
-          <CoParent foo={true}>
-            <Indirection />
-          </CoParent>
-        </div>
-      );
-    }
-
-    ReactNoop.render(<App />);
-    ReactNoop.flush();
+    expect(Scheduler).toFlushWithoutYielding();
     expect(getFlameChart()).toMatchSnapshot();
   });
 
   it('supports portals', () => {
-    const noopContainer = {children: []};
-    ReactNoop.render(
-      <Parent>{ReactNoop.createPortal(<Child />, noopContainer, null)}</Parent>,
+    const portalContainer = ReactNoop.getOrCreateRootContainer(
+      'portalContainer',
     );
-    ReactNoop.flush();
+    ReactNoop.render(
+      <Parent>
+        {ReactNoop.createPortal(<Child />, portalContainer, null)}
+      </Parent>,
+    );
+    expect(Scheduler).toFlushWithoutYielding();
+    expect(getFlameChart()).toMatchSnapshot();
+  });
+
+  it('supports memo', () => {
+    const MemoFoo = React.memo(function Foo() {
+      return <div />;
+    });
+    ReactNoop.render(
+      <Parent>
+        <MemoFoo />
+      </Parent>,
+    );
+    expect(Scheduler).toFlushWithoutYielding();
+    expect(getFlameChart()).toMatchSnapshot();
+  });
+
+  it('supports Suspense and lazy', async () => {
+    function Spinner() {
+      return <span />;
+    }
+
+    function fakeImport(result) {
+      return {default: result};
+    }
+
+    let resolve;
+    const LazyFoo = React.lazy(
+      () =>
+        new Promise(r => {
+          resolve = r;
+        }),
+    );
+
+    // Initial render
+    ReactNoop.render(
+      <Parent>
+        <React.Suspense fallback={<Spinner />} />
+      </Parent>,
+    );
+    expect(Scheduler).toFlushWithoutYielding();
+    expect(getFlameChart()).toMatchSnapshot();
+
+    // Update that suspends
+    ReactNoop.render(
+      <Parent>
+        <React.Suspense fallback={<Spinner />}>
+          <LazyFoo />
+        </React.Suspense>
+      </Parent>,
+    );
+    expect(Scheduler).toFlushWithoutYielding();
+    expect(getFlameChart()).toMatchSnapshot();
+
+    resolve(
+      fakeImport(function Foo() {
+        return <div />;
+      }),
+    );
+
+    await Promise.resolve();
+
+    ReactNoop.render(
+      <Parent>
+        <React.Suspense>
+          <LazyFoo />
+        </React.Suspense>
+      </Parent>,
+    );
+    expect(Scheduler).toFlushWithoutYielding();
     expect(getFlameChart()).toMatchSnapshot();
   });
 
@@ -535,15 +646,17 @@ describe('ReactDebugFiberPerf', () => {
 
   it('warns if an in-progress update is interrupted', () => {
     function Foo() {
+      Scheduler.unstable_yieldValue('Foo');
       return <span />;
     }
 
     ReactNoop.render(<Foo />);
-    ReactNoop.flushUnitsOfWork(2);
+    ReactNoop.flushNextYield();
     ReactNoop.flushSync(() => {
       ReactNoop.render(<Foo />);
     });
-    ReactNoop.flush();
+    expect(Scheduler).toHaveYielded(['Foo']);
+    expect(Scheduler).toFlushWithoutYielding();
     expect(getFlameChart()).toMatchSnapshot();
   });
 
@@ -553,8 +666,8 @@ describe('ReactDebugFiberPerf', () => {
     }
 
     ReactNoop.render(<Foo />);
-    ReactNoop.expire(5000);
-    ReactNoop.flush();
+    ReactNoop.expire(6000);
+    expect(Scheduler).toFlushWithoutYielding();
     expect(getFlameChart()).toMatchSnapshot();
   });
 });

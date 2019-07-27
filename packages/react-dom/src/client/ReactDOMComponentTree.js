@@ -1,12 +1,12 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
 
-import {HostComponent, HostText} from 'shared/ReactTypeOfWork';
-import invariant from 'fbjs/lib/invariant';
+import {HostComponent, HostText} from 'shared/ReactWorkTags';
+import invariant from 'shared/invariant';
 
 const randomKey = Math.random()
   .toString(36)
@@ -27,10 +27,7 @@ export function getClosestInstanceFromNode(node) {
     return node[internalInstanceKey];
   }
 
-  // Walk up the tree until we find an ancestor whose instance we have cached.
-  let parents = [];
   while (!node[internalInstanceKey]) {
-    parents.push(node);
     if (node.parentNode) {
       node = node.parentNode;
     } else {
@@ -40,17 +37,13 @@ export function getClosestInstanceFromNode(node) {
     }
   }
 
-  let closest;
   let inst = node[internalInstanceKey];
   if (inst.tag === HostComponent || inst.tag === HostText) {
     // In Fiber, this will always be the deepest root.
     return inst;
   }
-  for (; node && (inst = node[internalInstanceKey]); node = parents.pop()) {
-    closest = inst;
-  }
 
-  return closest;
+  return null;
 }
 
 /**

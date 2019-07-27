@@ -1,5 +1,5 @@
 /*!
- * Copyright (c) 2015-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,9 +7,9 @@
 
 'use strict';
 
-var expect = global.expect;
+const expect = global.expect;
 
-var numExpectations = 0;
+let numExpectations = 0;
 
 global.expect = function() {
   numExpectations += 1;
@@ -44,6 +44,13 @@ global.spyOnProd = function(...args) {
     return spyOn(...args);
   }
 };
+
+expect.extend({
+  ...require('../matchers/interactionTracingMatchers'),
+  ...require('../matchers/profilerMatchers'),
+  ...require('../matchers/toWarnDev'),
+  ...require('../matchers/reactTestMatchers'),
+});
 
 beforeEach(() => (numExpectations = 0));
 

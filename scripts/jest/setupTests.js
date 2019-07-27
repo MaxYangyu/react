@@ -1,12 +1,16 @@
 'use strict';
 
+const chalk = require('chalk');
+const util = require('util');
+const shouldIgnoreConsoleError = require('./shouldIgnoreConsoleError');
+
 if (process.env.REACT_CLASS_EQUIVALENCE_TEST) {
   // Inside the class equivalence tester, we have a custom environment, let's
   // require that instead.
   require('./spec-equivalence-reporter/setupTests.js');
 } else {
-  var env = jasmine.getEnv();
-  var errorMap = require('../error-codes/codes.json');
+  const env = jasmine.getEnv();
+  const errorMap = require('../error-codes/codes.json');
 
   // TODO: Stop using spyOn in all the test since that seem deprecated.
   // This is a legacy upgrade path strategy from:
@@ -39,17 +43,52 @@ if (process.env.REACT_CLASS_EQUIVALENCE_TEST) {
     global.spyOnDevAndProd = spyOn;
   }
 
+  expect.extend({
+    ...require('./matchers/interactionTracingMatchers'),
+    ...require('./matchers/profilerMatchers'),
+    ...require('./matchers/toWarnDev'),
+    ...require('./matchers/reactTestMatchers'),
+  });
+
+  // We have a Babel transform that inserts guards against infinite loops.
+  // If a loop runs for too many iterations, we throw an error and set this
+  // global variable. The global lets us detect an infinite loop even if
+  // the actual error object ends up being caught and ignored. An infinite
+  // loop must always fail the test!
+  env.beforeEach(() => {
+    global.infiniteLoopError = null;
+  });
+  env.afterEach(() => {
+    const error = global.infiniteLoopError;
+    global.infiniteLoopError = null;
+    if (error) {
+      throw error;
+    }
+  });
+
   ['error', 'warn'].forEach(methodName => {
-    var oldMethod = console[methodName];
-    var newMethod = function() {
-      newMethod.__callCount++;
-      oldMethod.apply(this, arguments);
+    const unexpectedConsoleCallStacks = [];
+    const newMethod = function(format, ...args) {
+      // Ignore uncaught errors reported by jsdom
+      // and React addendums because they're too noisy.
+      if (methodName === 'error' && shouldIgnoreConsoleError(format, args)) {
+        return;
+      }
+
+      // Capture the call stack now so we can warn about it later.
+      // The call stack has helpful information for the test author.
+      // Don't throw yet though b'c it might be accidentally caught and suppressed.
+      const stack = new Error().stack;
+      unexpectedConsoleCallStacks.push([
+        stack.substr(stack.indexOf('\n') + 1),
+        util.format(format, ...args),
+      ]);
     };
-    newMethod.__callCount = 0;
+
     console[methodName] = newMethod;
 
     env.beforeEach(() => {
-      newMethod.__callCount = 0;
+      unexpectedConsoleCallStacks.length = 0;
     });
 
     env.afterEach(() => {
@@ -58,15 +97,32 @@ if (process.env.REACT_CLASS_EQUIVALENCE_TEST) {
           `Test did not tear down console.${methodName} mock properly.`
         );
       }
-      if (console[methodName].__callCount !== 0) {
-        throw new Error(
-          `Expected test not to call console.${methodName}(). ` +
-            'If the warning is expected, mock it out using ' +
-            `spyOnDev(console, '${methodName}') or spyOnProd(console, '${
-              methodName
-            }'), ` +
-            'and test that the warning occurs.'
+
+      if (unexpectedConsoleCallStacks.length > 0) {
+        const messages = unexpectedConsoleCallStacks.map(
+          ([stack, message]) =>
+            `${chalk.red(message)}\n` +
+            `${stack
+              .split('\n')
+              .map(line => chalk.gray(line))
+              .join('\n')}`
         );
+
+        const message =
+          `Expected test not to call ${chalk.bold(
+            `console.${methodName}()`
+          )}.\n\n` +
+          'If the warning is expected, test for it explicitly by:\n' +
+          `1. Using the ${chalk.bold('.toWarnDev()')} / ${chalk.bold(
+            '.toLowPriorityWarnDev()'
+          )} matchers, or...\n` +
+          `2. Mock it out using ${chalk.bold(
+            'spyOnDev'
+          )}(console, '${methodName}') or ${chalk.bold(
+            'spyOnProd'
+          )}(console, '${methodName}'), and test that the warning occurs.`;
+
+        throw new Error(`${message}\n\n${messages.join('\n\n')}`);
       }
     });
   });
@@ -74,7 +130,11 @@ if (process.env.REACT_CLASS_EQUIVALENCE_TEST) {
   if (process.env.NODE_ENV === 'production') {
     // In production, we strip error messages and turn them into codes.
     // This decodes them back so that the test assertions on them work.
-    var decodeErrorMessage = function(message) {
+    // 1. `ErrorProxy` decodes error messages at Error construction time and
+    //    also proxies error instances with `proxyErrorInstance`.
+    // 2. `proxyErrorInstance` decodes error messages when the `message`
+    //    property is changed.
+    const decodeErrorMessage = function(message) {
       if (!message) {
         return message;
       }
@@ -94,16 +154,51 @@ if (process.env.REACT_CLASS_EQUIVALENCE_TEST) {
       return format.replace(/%s/g, () => args[argIndex++]);
     };
     const OriginalError = global.Error;
+    // V8's Error.captureStackTrace (used in Jest) fails if the error object is
+    // a Proxy, so we need to pass it the unproxied instance.
+    const originalErrorInstances = new WeakMap();
+    const captureStackTrace = function(error, ...args) {
+      return OriginalError.captureStackTrace.call(
+        this,
+        originalErrorInstances.get(error) ||
+          // Sometimes this wrapper receives an already-unproxied instance.
+          error,
+        ...args
+      );
+    };
+    const proxyErrorInstance = error => {
+      const proxy = new Proxy(error, {
+        set(target, key, value, receiver) {
+          if (key === 'message') {
+            return Reflect.set(
+              target,
+              key,
+              decodeErrorMessage(value),
+              receiver
+            );
+          }
+          return Reflect.set(target, key, value, receiver);
+        },
+      });
+      originalErrorInstances.set(proxy, error);
+      return proxy;
+    };
     const ErrorProxy = new Proxy(OriginalError, {
       apply(target, thisArg, argumentsList) {
         const error = Reflect.apply(target, thisArg, argumentsList);
         error.message = decodeErrorMessage(error.message);
-        return error;
+        return proxyErrorInstance(error);
       },
       construct(target, argumentsList, newTarget) {
         const error = Reflect.construct(target, argumentsList, newTarget);
         error.message = decodeErrorMessage(error.message);
-        return error;
+        return proxyErrorInstance(error);
+      },
+      get(target, key, receiver) {
+        if (key === 'captureStackTrace') {
+          return captureStackTrace;
+        }
+        return Reflect.get(target, key, receiver);
       },
     });
     ErrorProxy.OriginalError = OriginalError;

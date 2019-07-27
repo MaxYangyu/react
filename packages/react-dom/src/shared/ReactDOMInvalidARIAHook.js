@@ -1,27 +1,21 @@
 /**
- * Copyright (c) 2013-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
 
-import warning from 'fbjs/lib/warning';
-import {ReactDebugCurrentFrame} from 'shared/ReactGlobalSharedState';
+import warning from 'shared/warning';
 
 import {ATTRIBUTE_NAME_CHAR} from './DOMProperty';
 import isCustomComponent from './isCustomComponent';
 import validAriaProperties from './validAriaProperties';
 
-var warnedProperties = {};
-var rARIA = new RegExp('^(aria)-[' + ATTRIBUTE_NAME_CHAR + ']*$');
-var rARIACamel = new RegExp('^(aria)[A-Z][' + ATTRIBUTE_NAME_CHAR + ']*$');
+const warnedProperties = {};
+const rARIA = new RegExp('^(aria)-[' + ATTRIBUTE_NAME_CHAR + ']*$');
+const rARIACamel = new RegExp('^(aria)[A-Z][' + ATTRIBUTE_NAME_CHAR + ']*$');
 
-var hasOwnProperty = Object.prototype.hasOwnProperty;
-
-function getStackAddendum() {
-  var stack = ReactDebugCurrentFrame.getStackAddendum();
-  return stack != null ? stack : '';
-}
+const hasOwnProperty = Object.prototype.hasOwnProperty;
 
 function validateProperty(tagName, name) {
   if (hasOwnProperty.call(warnedProperties, name) && warnedProperties[name]) {
@@ -29,8 +23,8 @@ function validateProperty(tagName, name) {
   }
 
   if (rARIACamel.test(name)) {
-    var ariaName = 'aria-' + name.slice(4).toLowerCase();
-    var correctName = validAriaProperties.hasOwnProperty(ariaName)
+    const ariaName = 'aria-' + name.slice(4).toLowerCase();
+    const correctName = validAriaProperties.hasOwnProperty(ariaName)
       ? ariaName
       : null;
 
@@ -39,9 +33,8 @@ function validateProperty(tagName, name) {
     if (correctName == null) {
       warning(
         false,
-        'Invalid ARIA attribute `%s`. ARIA attributes follow the pattern aria-* and must be lowercase.%s',
+        'Invalid ARIA attribute `%s`. ARIA attributes follow the pattern aria-* and must be lowercase.',
         name,
-        getStackAddendum(),
       );
       warnedProperties[name] = true;
       return true;
@@ -50,10 +43,9 @@ function validateProperty(tagName, name) {
     if (name !== correctName) {
       warning(
         false,
-        'Invalid ARIA attribute `%s`. Did you mean `%s`?%s',
+        'Invalid ARIA attribute `%s`. Did you mean `%s`?',
         name,
         correctName,
-        getStackAddendum(),
       );
       warnedProperties[name] = true;
       return true;
@@ -61,8 +53,8 @@ function validateProperty(tagName, name) {
   }
 
   if (rARIA.test(name)) {
-    var lowerCasedName = name.toLowerCase();
-    var standardName = validAriaProperties.hasOwnProperty(lowerCasedName)
+    const lowerCasedName = name.toLowerCase();
+    const standardName = validAriaProperties.hasOwnProperty(lowerCasedName)
       ? lowerCasedName
       : null;
 
@@ -76,10 +68,9 @@ function validateProperty(tagName, name) {
     if (name !== standardName) {
       warning(
         false,
-        'Unknown ARIA attribute `%s`. Did you mean `%s`?%s',
+        'Unknown ARIA attribute `%s`. Did you mean `%s`?',
         name,
         standardName,
-        getStackAddendum(),
       );
       warnedProperties[name] = true;
       return true;
@@ -92,8 +83,8 @@ function validateProperty(tagName, name) {
 function warnInvalidARIAProps(type, props) {
   const invalidProps = [];
 
-  for (var key in props) {
-    var isValid = validateProperty(type, key);
+  for (const key in props) {
+    const isValid = validateProperty(type, key);
     if (!isValid) {
       invalidProps.push(key);
     }
@@ -107,19 +98,17 @@ function warnInvalidARIAProps(type, props) {
     warning(
       false,
       'Invalid aria prop %s on <%s> tag. ' +
-        'For details, see https://fb.me/invalid-aria-prop%s',
+        'For details, see https://fb.me/invalid-aria-prop',
       unknownPropString,
       type,
-      getStackAddendum(),
     );
   } else if (invalidProps.length > 1) {
     warning(
       false,
       'Invalid aria props %s on <%s> tag. ' +
-        'For details, see https://fb.me/invalid-aria-prop%s',
+        'For details, see https://fb.me/invalid-aria-prop',
       unknownPropString,
       type,
-      getStackAddendum(),
     );
   }
 }
